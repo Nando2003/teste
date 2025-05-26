@@ -510,32 +510,31 @@ class Element:
         
     def __rows_generator(self, column_limit: Optional[int] = None, remove_empty_rows: bool = True):
         rows = {}
-        
+
         for element in self.get_children():
             try:
-                r = element.row
-                c = element.column
+                r = element.get_row()
+                c = element.get_column()
             except Exception:
                 continue
-            
-            if column_limit is not None and c >= column_limit:
-                continue
-            
+
             if r not in rows:
                 rows[r] = []
             
+            # Considera elementos sem texto como "vazios" (opcional: ajuste conforme seu critério de vazio)
             if not getattr(element, "text", None):
                 continue
-            
+
             rows[r].append(element)
-            
+
         for r in sorted(rows.keys()):
-            row_elems = sorted(rows[r], key=lambda e: e.column)
+            row_elems = sorted(rows[r], key=lambda e: e.get_column())
             
+            # Aqui sim, fazemos o slice para limitar o número de colunas retornadas!
             if column_limit is not None:
                 row_elems = row_elems[:column_limit]
-                
+
             if remove_empty_rows and not row_elems:
                 continue
-            
+
             yield row_elems
