@@ -148,7 +148,7 @@ class Session:
         """
         from pysapgui.element import Element
         try:
-            return Element(self, self._session.findById(element_id))
+            return Element(self, self.session.findById(element_id))
         except Exception as e:
             raise SapElementNotFoundException(element_id) from e
     

@@ -440,7 +440,7 @@ class Element:
         self, 
         column_limit: Optional[int] = None, 
         return_empty_rows: bool = True
-    ) -> Generator[Union[Sequence['Element'], Sequence[ItemElement]], None, None]:
+    ) -> Generator[Union[Sequence['Element'], Sequence['ItemElement']], None, None]:
         """
         Iterates over each row of the current SAP element, yielding either ItemElement
         or Element instances, depending on the underlying SAP control type.
