@@ -53,20 +53,24 @@ class SapElementNotFoundException(Exception):
     def __init__(self, element_id: str):
         message = f"SAP element with ID '{element_id}' not found."
         super().__init__(message)
-
-
-class SapSessionMismatchException(Exception):
-    """Exception raised when there is a mismatch in the SAP session."""
-    def __init__(self):
-        message = (
-            "The SAP session has changed. "
-            "Please refresh the session to continue."
-        )
-        super().__init__(message)
         
         
 class SapAttributeNotFoundException(AttributeError):
     """Exception raised when a SAP element attribute is not found."""
     def __init__(self, attribute: str):
         message = f"SAP element has no attribute '{attribute}'."
+        super().__init__(message)
+
+
+class TableTreeSelectAllNotSupportedException(Exception):
+    """Raised when attempting to select all items in a TableTreeElement, which is not supported."""
+    def __init__(self):
+        message = "The select_all operation is not supported for TableTreeElement."
+        super().__init__(message)
+        
+
+class TableTreeColumnSelectionException(Exception):
+    """Raised when there is an error selecting a column in a TableTreeElement."""
+    def __init__(self, column):
+        message = f"Failed to select column '{column}' in TableTreeElement."
         super().__init__(message)

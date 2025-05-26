@@ -85,14 +85,13 @@ def search_element(
     return None if not return_all else []
 
 
-def requires_valid_session(method: Callable):
+def check_element_attribute(method: Callable):
     def wrapper(self, *args, **kwargs):
-        self._verify_session()
         try:
             return method(self, *args, **kwargs)
         
         except AttributeError as e:
-            
+
             if isinstance(e, SapAttributeNotFoundException):
                 raise
             

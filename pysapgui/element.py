@@ -1,83 +1,169 @@
 import re
 import win32com.client as client
-from typing import Optional, Any, Literal
+from typing import Optional, Any, Union, Literal, Sequence, Generator, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pysapgui.item_element import ItemElement
 
 from pysapgui.session import Session
-from pysapgui.exceptions import SapSessionMismatchException, SapAttributeNotFoundException
-from pysapgui.utils import search_path, search_element, requires_valid_session
+from pysapgui.utils import search_path, check_element_attribute
+from pysapgui.exceptions import SapAttributeNotFoundException
 
 
 class Element:
+    """
+    Represents a SAP GUI element.
+    
+    This class provides methods to interact with SAP GUI elements, such as filling input fields,
+    clicking buttons, and navigating through tables and grids.
+    It is designed to be used with the SAP GUI Scripting API, allowing automation of SAP GUI tasks.
+    
+    Attributes:
+        session (Session): The SAP session associated with this element.
+        element (client.CDispatch): The underlying COM object representing the SAP GUI element.
+    """
+    @staticmethod
+    def each_table_row(
+        parent: 'Element',
+        column_limit: Optional[int] = None,
+        return_empty_rows: bool = False
+    ) -> Generator[Sequence['Element'], None, None]:
+        """
+        Yields each row as a list of GuiTableControl.
+        """
+        table = parent.element
+        columns_count = table.Columns.Count
+        
+        if column_limit is not None:
+            columns_count = min(columns_count, column_limit)
+
+        for row in range(table.Rows.Count):
+            row_elements = []
+            
+            for column in range(columns_count):
+                try:
+                    cell = table.Columns.elementAt(column).elementAt(row)
+                    cell_element = Element(parent.session, cell)
+                    try:
+                        cell_element.set_column_title(table.Columns.elementAt(column).Title)
+                    except Exception:
+                        pass
+                    row_elements.append(cell_element)
+                    
+                except Exception:
+                    continue
+
+            if not return_empty_rows:
+                if all(
+                    (getattr(cell, 'get_text', lambda: '')() == '' or getattr(cell, 'get_text', lambda: None)() is None)
+                    for cell in row_elements
+                ):
+                    continue
+
+            if not row_elements:
+                break
+            
+            yield row_elements
+        
     def __init__(self, session: Session, element: client.CDispatch):
         self.session = session
         self.element = element
-
-class SapElement:
-    def __init__(self, session: Session, element: client.CDispatch):
-        self.session = session
-        self.element = element
-
-        # Store the real session object for direct access
-        self.__real_session = session.session
+        self.__column_title = None
         
     def __getattr__(self, name: Any) -> Any:
         try:
             return getattr(self.element, name)
         except AttributeError as e:
             raise SapAttributeNotFoundException(name) from e
-        
-    def _verify_session(self) -> None:
-        if self.session.session != self.__real_session:
-            raise SapSessionMismatchException
-        
-    @requires_valid_session
-    def click(self) -> None:
-        """
-        Simulates a click on the SAP element
-        """
-        self.element.press()
+    
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, Element) and (
+            self.get_id() == value.get_id() and 
+            self.get_type() == value.get_type()
+        )
     
     def get_id(self) -> str:
         """
-        Returns the ID of the SAP element
+        Returns the ID of the SAP element.
+        
+        This is useful for identifying the element in the SAP GUI hierarchy.
+        
+        Returns:
+            str: The ID of the SAP element.
         """
-        return self.element.Id
+        return str(self.element.Id)
     
+    def get_type(self) -> str:
+        """
+        Returns the type of the SAP element.
+        
+        This is useful for identifying the type of the element in the SAP GUI hierarchy.
+        
+        Returns:
+            str: The type of the SAP element.
+        """
+        return str(self.element.Type)
+    
+    @check_element_attribute
+    def get_column_title(self) -> str:
+        """
+        Returns the title of the SAP element.
+        
+        This is useful for getting the label or title of the element.
+        
+        Returns:
+            str: The title of the SAP element.
+        """
+        if not self.__title:
+            raise SapAttributeNotFoundException("Title")
+        
+        return str(self.__column_title)
+    
+    def set_column_title(self, column_title: str) -> None:
+        """
+        Sets the title of the SAP element.
+        
+        This is useful for updating the label or title of the element.
+        
+        Args:
+            title (str): The new title for the SAP element.
+        """
+        self.__column_title = column_title
+    
+    @check_element_attribute
     def get_text(self) -> str:
         """
-        Returns the title of the SAP element
+        Returns the text of the SAP element.
+        
+        This is useful for getting the label or title of the element.
+        
+        Returns:
+            str: The text of the SAP element.
         """
-        return self.element.text
+        return str(self.element.text)
     
-    @requires_valid_session
+    @check_element_attribute
     def fill(self, value: Any) -> None:
         """
-        Fills the SAP element with the given value
-        """
-        self.element.text = value
-    
-    @requires_valid_session
-    def select_key(self, key: Any = None):
-        """
-        Selects a key in the SAP element.
-        
-        If the element is a table, it selects the first row by default.
-        """
-        if key:
-            self.element.select(key)
-        else:
-            self.element.select()
-            
-    @requires_valid_session
-    def set_key(self, key: Any) -> None:
-        """
-        Sets a key in the SAP element.
+        Fills the SAP element with the given value.
         
         This is typically used for input fields or selection boxes.
-        """
-        self.element.key = key
         
-    @requires_valid_session
+        Args:
+            value (Any): The value to fill in the SAP element.
+        """
+        self.element.text = value
+        
+    @check_element_attribute
+    def click(self) -> None:
+        """
+        Simulates a click on the SAP element.
+        
+        This is useful for buttons or clickable elements in the SAP GUI.
+        """
+        self.element.press()
+    
+    @check_element_attribute
     def set_focus(self) -> None:
         """
         Sets focus on the SAP element.
@@ -86,6 +172,28 @@ class SapElement:
         """
         self.element.setFocus()
         
+    @check_element_attribute
+    def select_key(self, key: Any = None) -> None:
+        """
+        Selects a key in the SAP element.
+        
+        If the element is a table, it selects the first row by default.
+        
+        Args:
+            key (Any): The key to select in the SAP element. Defaults to None.
+        """
+        self.element.select(key) if key else self.element.select()
+
+    @check_element_attribute
+    def set_key(self, key: Any) -> None:
+        """
+        Sets a key in the SAP element.
+        
+        This is typically used for input fields or selection boxes.
+        """
+        self.element.key = key
+    
+    @check_element_attribute
     def get_tooltip(self) -> str:
         """
         Returns the tooltip of the SAP element.
@@ -94,23 +202,21 @@ class SapElement:
         """
         return self.element.tooltip
     
+    @check_element_attribute     
     def is_selected(self) -> bool:
         """
-        Checks if the SAP element is selected.
+        Checks if the SAP element (checkbox/radio) is selected.
         
         Returns:
             bool: True if the element is selected, False otherwise.
         """
         if hasattr(self.element, "Selected"):
             return self.element.Selected
-        
         elif hasattr(self.element, "Checked"):
             return self.element.Checked
-        
-        else:
-            raise SapAttributeNotFoundException("Selected/Checked")
+        raise SapAttributeNotFoundException("Selected/Checked")
     
-    @requires_valid_session
+    @check_element_attribute
     def select(self) -> None:
         """
         Checks the SAP element (checkbox/radio).
@@ -124,10 +230,9 @@ class SapElement:
             self.element.Selected = True
         elif hasattr(self.element, "Checked"):
             self.element.Checked = True
-        else:
-            raise SapAttributeNotFoundException("Selected/Checked")
+        raise SapAttributeNotFoundException("Selected/Checked")
     
-    @requires_valid_session
+    @check_element_attribute
     def toggle_select(self) -> None:
         """
         Changes the selection state of the SAP element.
@@ -141,44 +246,35 @@ class SapElement:
             self.element.Selected = not self.element.Selected
         elif hasattr(self.element, "Checked"):
             self.element.Checked = not self.element.Checked
-        else:
-            raise SapAttributeNotFoundException("Selected/Checked")
+        raise SapAttributeNotFoundException("Selected/Checked")
 
-    def get_element_type(self) -> str:
-        """
-        Returns the type of the SAP element.
-        
-        This is useful for understanding what kind of element it is (e.g., button, input field, etc.).
-        """
-        return self.element.Type
-    
-    @requires_valid_session
-    def get_parent(self) -> 'SapElement':
+    @check_element_attribute
+    def get_parent(self) -> 'Element':
         """
         Returns the parent of the SAP element.
         
         This is useful for navigating the SAP GUI hierarchy.
         
         Returns:
-            SapElement: The parent element.
+            Element: The parent element wrapped in an Element instance.
         """
         parent_element = self.element.Parent
-        return SapElement(self.session, parent_element)
+        return Element(self.session, parent_element)
     
-    @requires_valid_session
-    def get_children(self) -> list['SapElement']:
+    @check_element_attribute
+    def get_children(self) -> list['Element']:
         """
         Returns the children of the SAP element.
         
         This is useful for navigating the SAP GUI hierarchy.
         
         Returns:
-            list[SapElement]: A list of child elements.
+            list[Element]: A list of child elements wrapped in Element instances.
         """
         children = self.element.Children
-        return [SapElement(self.session, child) for child in children]
+        return [Element(self.session, child) for child in children]
     
-    @requires_valid_session
+    @check_element_attribute
     def get_column(self) -> int:
         """
         Returns the column index of the SAP element.
@@ -200,7 +296,7 @@ class SapElement:
         
         raise SapAttributeNotFoundException("Column")
     
-    @requires_valid_session
+    @check_element_attribute
     def get_row(self) -> int:
         """
         Returns the row index of the SAP element.
@@ -222,6 +318,7 @@ class SapElement:
         
         raise SapAttributeNotFoundException("Row")
     
+    @check_element_attribute
     def is_scrollable(self) -> bool:
         """
         Checks if the SAP element is scrollable.
@@ -233,6 +330,7 @@ class SapElement:
         """
         return hasattr(self.element, 'verticalScrollbar')
     
+    @check_element_attribute
     def get_scroll_position(self, max_or_min: Optional[Literal['max', 'min']] = None):
         """
         Scrolls the SAP element to the maximum or minimum position.
@@ -258,24 +356,7 @@ class SapElement:
         else:
             return scrollbar.position
     
-    @requires_valid_session
-    def scroll_to_position(self, position: int) -> None:
-        """
-        Scrolls the SAP element to the specified position.
-        
-        Args:
-            position (int): The position to scroll to.
-        
-        Raises:
-            SapAttributeNotFoundException: If the element does not have a vertical scrollbar.
-        """
-        if not self.is_scrollable():
-            raise SapAttributeNotFoundException("verticalScrollbar")
-        
-        scrollbar = self.element.verticalScrollbar
-        scrollbar.position = position
-    
-    @requires_valid_session
+    @check_element_attribute
     def scroll_to_relative_position(self, direction: Literal['up', 'down'], amount: int = 0) -> bool:
         """
         Scrolls the SAP element vertically by a specified amount in the given direction.
@@ -317,3 +398,144 @@ class SapElement:
         
         self.element.verticalScrollbar.position = new_position
         return True
+    
+    @check_element_attribute
+    def scroll_to_absolute_position(self, position: int) -> None:
+        """
+        Scrolls the SAP element to an absolute position.
+        
+        Args:
+            position (int): The absolute position to scroll to.
+        
+        Returns:
+            bool: True if the scroll was successful, False if it would exceed the bounds.
+        
+        Raises:
+            SapAttributeNotFoundException: If the element does not have a vertical scrollbar.
+        """
+        if not self.is_scrollable():
+            raise SapAttributeNotFoundException("verticalScrollbar")
+        
+        self.element.verticalScrollbar.position = position
+    
+    def find_partial_element(self, re_element_id: str) -> Optional['Element']:
+        """
+        Finds a child element using a partial (regex) path.
+
+        Args:
+            re_element_id (str): The partial or regex path of the child element.
+
+        Returns:
+            Optional[Element]: The first matching child element wrapped in an Element instance, or None if not found.
+        """
+        results = search_path(
+            self.element,
+            re_path=re_element_id,
+            return_all=False,
+            element_wrapper=lambda elem: Element(self.session, elem)
+        )
+        return results if isinstance(results, Element) else None
+          
+    def each_row(
+        self, 
+        column_limit: Optional[int] = None, 
+        return_empty_rows: bool = True
+    ) -> Generator[Union[Sequence['Element'], Sequence[ItemElement]], None, None]:
+        """
+        Iterates over each row of the current SAP element, yielding either ItemElement
+        or Element instances, depending on the underlying SAP control type.
+
+        This method provides a uniform interface to iterate over rows for different
+        table-like SAP GUI controls, adapting the behavior as follows:
+
+        - For SAP GridView controls ("GridViewCtrl" in element text):
+            Uses `GridViewElement.each_row`, yielding lists of GridViewElement for each row.
+            Each item represents a cell in the grid.
+        
+        - For SAP TableTree controls ("TableTreeCtrl" in element text):
+            Uses `TableTreeElement.each_row`, yielding lists of TableTreeElement for each row.
+            Each item represents a node or cell in the table tree.
+        
+        - For classic SAP Table controls ("GuiTableControl" in element type):
+            Uses `Element.each_table_row`, yielding lists of Element, one per cell, for each row.
+            Handles both the grid and plain table visualizations.
+        
+        - For other SAP elements that expose row/column information:
+            Falls back to an internal row generator (`__rows_generator`), which yields
+            lists of Element for each detected row.
+        
+        Args:
+            column_limit (Optional[int]): 
+                The maximum number of columns to return for each row. 
+                If None, returns all columns.
+            return_empty_rows (bool): 
+                If True, includes empty rows in the iteration.
+                If False, skips rows where all cells are empty or blank.
+        
+        Yields:
+            Sequence[Element] or Sequence[ItemElement]: 
+                For each row, yields a sequence (usually a list) of Element or ItemElement 
+                instances representing the cells of that row.
+        """
+        from pysapgui.item_element import GridViewElement, TableTreeElement
+        
+        element_text = self.get_text()
+        element_type = self.get_type()
+        
+        if 'GridViewCtrl' in element_text:
+            yield from GridViewElement.each_row(
+                parent=self, 
+                column_limit=column_limit, 
+                return_empty_rows=return_empty_rows
+            )
+            
+        elif 'TableTreeCtrl' in element_text:
+            yield from TableTreeElement.each_row(
+                parent=self, 
+                column_limit=column_limit, 
+                return_empty_rows=return_empty_rows
+            )
+        
+        elif 'GuiTableControl' in element_type:
+            yield from Element.each_table_row(
+                parent=self, 
+                column_limit=column_limit, 
+                return_empty_rows=return_empty_rows
+            )
+        
+        yield from self.__rows_generator(
+            column_limit=column_limit, 
+            remove_empty_rows=not return_empty_rows
+        )
+        
+    def __rows_generator(self, column_limit: Optional[int] = None, remove_empty_rows: bool = True):
+        rows = {}
+        
+        for element in self.get_children():
+            try:
+                r = element.row
+                c = element.column
+            except Exception:
+                continue
+            
+            if column_limit is not None and c >= column_limit:
+                continue
+            
+            if r not in rows:
+                rows[r] = []
+            
+            if not getattr(element, "text", None):
+                continue
+            
+            rows[r].append(element)
+            
+        for r in sorted(rows.keys()):
+            row_elems = sorted(rows[r], key=lambda e: e.column)
+            
+            if column_limit is not None:
+                row_elems = row_elems[:column_limit]
+                
+            if remove_empty_rows and not row_elems:
+                continue
+            
+            yield row_elems

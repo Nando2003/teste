@@ -42,7 +42,7 @@ class Session:
         if not sessions_length:
             raise NoSapSessionException
         
-        if session_id:
+        if session_id is not None:
             if (session_id < 0) or (sessions_length <= session_id):
                 raise NoSapSessionException(session_id)
             
@@ -164,10 +164,10 @@ class Session:
         """
         from pysapgui.element import Element
         results = search_path(
-            self._session,
+            self.session,
             re_path=re_element_id,
             return_all=False,
             element_wrapper=lambda elem: Element(self, elem)
         )
-        return results[0] if results else None
+        return results if isinstance(results, Element) else None
     

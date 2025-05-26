@@ -8,13 +8,23 @@ from pysapgui.exceptions import UnableToConnectException, NoSapConnectionExcepti
 
 
 class Connection:
+    """
+    Represents a connection to the SAP GUI.
+    
+    This class provides methods to interact with the SAP GUI scripting engine,
+    retrieve connection details, and manage SAP sessions.
+    
+    Attributes:
+        ScriptingEngine (client.CDispatch): The scripting engine for SAP GUI.
+        connection (client.CDispatch): The current SAP connection.
+    """
     def __init__(self, connection_id: Optional[int] = None):
         self.ScriptingEngine = self.__get_scripting_engine()
         self.connection = self.__get_connection(connection_id)
         self.connection_id = connection_id
     
     def __getattr__(self, name: Any) -> Any:
-        return getattr(self.session, name)
+        return getattr(self.connection, name)
     
     def __eq__(self, value: object) -> bool:
         return isinstance(value, Connection) and self.get_id() == value.get_id()
@@ -33,7 +43,7 @@ class Connection:
         if not connections_length:
             raise NoSapConnectionException
         
-        if connection_id:
+        if connection_id is not None:
             if (connection_id < 0) or (connections_length < connection_id):
                 raise NoSapConnectionException(connection_id)
 
@@ -70,3 +80,4 @@ class Connection:
         """
         from pysapgui.session import Session
         return Session(session_id, self)
+    
