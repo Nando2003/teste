@@ -1,0 +1,17 @@
+[project]
+name = "pysapgui"
+version = "0.1.0"
+description = "Automação estruturada do SAP GUI em Python via Scripting API (COM)"
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["sap", "sapgui", "automação", "scripting", "win32com"]
+authors = [
+    { name = "Fernando Luiz Fontes", email = "nandofontes30@gmail.com" }
+]
+dependencies = [
+    "pywin32>=305"
+]
+
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
